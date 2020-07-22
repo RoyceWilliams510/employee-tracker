@@ -8,7 +8,8 @@ var cTable = require('console.table');
 
 const prompts = [
     "View all employees",
-    "View all employees by department",
+    "View all departments",
+    "View all roles",
     "Add employee",
     "Update employee role",
     "Update employee manager",
@@ -61,15 +62,17 @@ async function init(){
         choices: prompts
     })
     if(choice===prompts[0]){viewAll();}
-    if(choice===prompts[1]){viewByDepartment();}
-    if(choice===prompts[2]){formatEmployees(1)}
-    if(choice===prompts[3]){formatEmployees(2);}
-    if(choice===prompts[4]){formatEmployees(3);}
-    if(choice===prompts[5]){formatEmployees(4);}
-    if(choice===prompts[6]){addDepartment();}
-    if(choice===prompts[7]){deleteDepartment();}
-    if(choice===prompts[8]){addRole();}
-    if(choice===prompts[9]){deleteRole();}
+    if(choice===prompts[1]){viewDepartments();}
+    if(choice===prompts[2]){viewRoles();}
+    if(choice===prompts[3]){formatEmployees(1)}
+    if(choice===prompts[4]){formatEmployees(2);}
+    if(choice===prompts[5]){formatEmployees(3);}
+    if(choice===prompts[6]){formatEmployees(4);}
+    if(choice===prompts[7]){addDepartment();}
+    if(choice===prompts[8]){deleteDepartment();}
+    if(choice===prompts[9]){addRole();}
+    if(choice===prompts[10]){deleteRole();}
+
 }
 
 
@@ -85,16 +88,28 @@ async function viewAll(){
     })
 }
 
-async function viewByDepartment(){
+async function viewDepartments(){
     connection.query("SELECT * FROM department", function(err, res) {
         if (err) throw err;
+        console.log("---------------------------------------------------");
         console.table(res);
+        console.log("---------------------------------------------------");
+
+        init();
+    })
+}
+
+function viewRoles(){
+    connection.query("SELECT * FROM roles", function(err, res) {
+        if (err) throw err;
+        console.log("---------------------------------------------------");
+        console.table(res);
+        console.log("---------------------------------------------------");
         init();
     })
 }
 
 async function addEmployee(roles,managers){
-    console.log(roles);
     const {firstName} = await inquirer.prompt({
         message: employeePrompts[0],
         name: "firstName"
@@ -109,15 +124,13 @@ async function addEmployee(roles,managers){
         choices: roles,
         name: "roleId"
     })
-    console.log(roleId)
     const {managerId} = await inquirer.prompt({
         type: "list",
         message: employeePrompts[3],
         choices: managers,
         name: "managerId"
     })
-    console.log(managerId);
-    var query = connection.query(
+    connection.query(
         "INSERT INTO employees SET ?",
         {
           first_Name: firstName,
@@ -132,21 +145,100 @@ async function addEmployee(roles,managers){
         })
 }
 
-
-async function updateEmployeeRole(employees){
+async function updateEmployeeRole(employees,roles){
     console.log("updateEmployeeRole");
-    console.log(employees);
+    var employeeName;
+    var roleName;
+    const {employeeId} = await inquirer.prompt({
+        type: "list",
+        message: "Which employee would you like to update?",
+        choices: employees,
+        name: "employeeId"
+    })
+    for(var i = 0; i<employees.length; i++ ){
+        if(employees[i].value ===employeeId){
+           employeeName = employees[i].name;
+        }
+    }
+    const {roleId} = await inquirer.prompt({
+        type: "list",
+        message: employeePrompts[2],
+        choices: roles,
+        name: "roleId"
+    })
+    for(var i = 0; i<roles.length; i++ ){
+        if(roles[i].value ===roleId){
+           roleName = roles[i].name;
+        }
+    }
+    connection.query(
+        "UPDATE employees SET ? WHERE ?",
+        [
+          {
+            role_id: roleId
+          },
+          {
+            id:employeeId
+          }
+        ],
+        function(err, res) {
+            console.log("You have successfully updated "+employeeName+"'s role to "+roleName+".");
+            console.log("---------------------------------------------------");
+            init();
+        })
+
+
 }
 
 async function updateEmployeeManager(employees){
-    console.log("updateEmployeeManager");
-    console.log(employees);
+    var employeeName;
+    var managerName;
+    var managers = [{name: "No Manager", value: null}];
+    const {employeeId} = await inquirer.prompt({
+        type: "list",
+        message: "Which employee would you like to update?",
+        choices: employees,
+        name: "employeeId"
+    })
+    for(var i = 0; i<employees.length; i++ ){
+        if(employees[i].value !==employeeId){
+            managers.push(employees[i]);
+        }
+        if(employees[i].value ===employeeId){
+            employeeName = employees[i].name;
+         }
+    }
+    
+    const {managerId} = await inquirer.prompt({
+        type: "list",
+        message: "Who would you like to assign as their new manager?",
+        choices: managers,
+        name: "managerId"
+    })
 
+    for(var i = 0; i<managers.length; i++ ){
+        if(managers[i].value ===managerId){
+           managerName = managers[i].name;
+        }
+    }
+    connection.query(
+        "UPDATE employees SET ? WHERE ?",
+        [
+          {
+            manager_id: managerId
+          },
+          {
+            id:employeeId
+          }
+        ],
+        function(err, res) {
+            console.log("You have successfully updated "+employeeName+"'s manager to "+managerName+".");
+            console.log("---------------------------------------------------");
+            init();
+        })
 }
 
 async function deleteEmployee(employees){
-    console.log("deleteEmployee");
-    console.log(employees);
     const {employeeId} = await inquirer.prompt({
         type: "list",
         message: "Select the employee you would like to delete:",
@@ -196,14 +288,12 @@ async function formatEmployees(signal){
         if(signal===1){
             var pass = {name: "No Manager", value: null}
             employees.push(pass);
-            formatRoles(employees);
+            formatRoles(employees,signal);
         }
         if(signal===2){
-            updateEmployeeRole(employees);
+            formatRoles(employees,signal);
         }
         if(signal===3){
-            var pass = {name: "No Manager", value: null}
-            employees.push(pass);
             updateEmployeeManager(employees);
         }
         if(signal===4){
@@ -211,13 +301,18 @@ async function formatEmployees(signal){
         }
     })
 }
-async function formatRoles(managers){
+async function formatRoles(managers,signal){
     await connection.query("SELECT title,id FROM roles", function(err, res) {
         var roles = []
         for(var i =0; i<res.length; i++){
             var role = {name: res[i].title, value: res[i].id }
             roles.push(role);
         }
-        addEmployee(roles,managers);
+        if(signal ===1){
+            addEmployee(roles,managers);
+        }
+        if(signal===2){
+            updateEmployeeRole(managers,roles);
+        }
     })
 }
